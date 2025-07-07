@@ -285,13 +285,13 @@ class GPSNode(Node):
             self.publish_warn(f"Error while drawing: {e}")
         
         # Optional: draw centerline circles/lines
-        if hasattr(self, 'track') and hasattr(self.track, 'segments'):
-            for seg in self.track.segments:
-                if seg["type"] == "circle":
-                    circle = plot.Circle((seg["cx"], seg["cy"]), seg["r"], color='gray', fill=False, linestyle='--')
-                    ax.add_patch(circle)
-                elif seg["type"] == "line":
-                    ax.plot([seg["x1"], seg["x2"]], [seg["y1"], seg["y2"]], color='gray', linestyle='--')
+        #if hasattr(self, 'track') and hasattr(self.track, 'segments'):
+         #   for seg in self.track.segments:
+          #      if seg["type"] == "circle":
+         #           circle = plot.Circle((seg["cx"], seg["cy"]), seg["r"], color='gray', fill=False, linestyle='--')
+         #           ax.add_patch(circle)
+         #       elif seg["type"] == "line":
+          #          ax.plot([seg["x1"], seg["x2"]], [seg["y1"], seg["y2"]], color='gray', linestyle='--')
 
         ax.set_aspect('equal')
         ax.set_title("Track and GPS Data")

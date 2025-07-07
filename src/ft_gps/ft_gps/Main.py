@@ -3,6 +3,7 @@ from rclpy.node import Node
 import serial
 import math
 from collections import deque
+from std_msgs.msg import String 
 
 # Centerline logic
 class Centerline:
@@ -70,7 +71,13 @@ def gps_to_local(lat, lon, origin_lat, origin_lon):
 class GPSNode(Node):
     def __init__(self):
         super().__init__('gps_node')
-        self.get_logger().info('GPS Node started')
+
+        # loggers
+        self.info_pub = self.create_publisher(String, 'gps_info', 100)
+        self.warn_pub = self.create_publisher(String, 'gps_warn', 100)
+        self.error_pub = self.create_publisher(String, 'gps_error', 100)
+
+        self.publish_info('GPS Node started')
 
         self.PORT = "/dev/tty.usbmodem14301"
         self.BAUD = 9600
@@ -86,7 +93,7 @@ class GPSNode(Node):
             self.ser = serial.Serial(self.PORT, self.BAUD, timeout=1)
             self.timer = self.create_timer(0.1, self.read_gps_data) # loop 
         except Exception as e:
-            self.get_logger().error(f"Serial init failed: {e}")
+            self.publish_error(f"Serial init failed: {e}")
             raise
     
     def setup_cones(self):
@@ -107,13 +114,26 @@ class GPSNode(Node):
             "exit": {"x": 0, "y": 22, "radius": 0.2, "entered": False, "exited": False}
         } 
 
+    def publish_info(self, msg: str):
+        self.get_logger().info(msg)
+        self.info_pub.publish(String(data=msg))
+
+    def publish_warn(self, msg: str):
+        self.get_logger().warn(msg)
+        self.warn_pub.publish(String(data=msg))
+
+    def publish_error(self, msg: str):
+        self.get_logger().error(msg)
+        self.error_pub.publish(String(data=msg))
+
+
     def check_cone_proximity(self, x, y, cones, label, near_thresh=0.5, off_thresh=0.2):
         for cone_x, cone_y in cones:
             distance = math.hypot(x - cone_x, y - cone_y)
             if distance < off_thresh:
-                self.get_logger().warn(f"VERY CLOSE to {label} cone at ({cone_x:.2f}, {cone_y:.2f}) — possible collision!")
+                self.publish_warn(f"VERY CLOSE to {label} cone at ({cone_x:.2f}, {cone_y:.2f}) — possible collision!")
             elif distance < near_thresh:
-                self.get_logger().warn(f"Near {label} cone at ({cone_x:.2f}, {cone_y:.2f})")
+                self.publish_warn(f"Near {label} cone at ({cone_x:.2f}, {cone_y:.2f})")
 
 
     def check_loop_events(self, x, y, zones):
@@ -126,7 +146,7 @@ class GPSNode(Node):
                 zones["start"]["entered"] = True
         elif zones["start"]["entered"] and not zones["start"]["exited"]:
             zones["start"]["exited"] = True
-            self.get_logger().info("Starting SKIDPAD")
+            self.publish_info("Starting SKIDPAD")
 
         # Loop counter
         mp = zones["middle_point"]
@@ -135,15 +155,15 @@ class GPSNode(Node):
                 mp["entry_count"] += 1
                 mp["in_zone"] = True
                 if mp["entry_count"] == 1:
-                    self.get_logger().info(" Starting right loop 1")
+                    self.publish_info(" Starting right loop 1")
                 elif mp["entry_count"] == 2:
-                    self.get_logger().info(" Finished right loop 1, starting right loop 2")
+                    self.publish_info(" Finished right loop 1, starting right loop 2")
                 elif mp["entry_count"] == 3:
-                    self.get_logger().info(" Starting left loop 1")
+                    self.publish_info(" Starting left loop 1")
                 elif mp["entry_count"] == 4:
-                    self.get_logger().info(" Finished left loop 1, starting left loop 2")
+                    self.publish_info(" Finished left loop 1, starting left loop 2")
                 elif mp["entry_count"] == 5:
-                    self.get_logger().info(" Loops completed, exiting")
+                    self.publish_info(" Loops completed, exiting")
         else:
             mp["in_zone"] = False
 
@@ -153,7 +173,7 @@ class GPSNode(Node):
             if not rl["in_zone"]:
                 rl["entry_count"] += 1
                 rl["in_zone"] = True
-                self.get_logger().info(f" Right loop {rl['entry_count']} in progress")
+                self.publish_info(f" Right loop {rl['entry_count']} in progress")
         else:
             rl["in_zone"] = False
 
@@ -163,7 +183,7 @@ class GPSNode(Node):
             if not ll["in_zone"]:
                 ll["entry_count"] += 1
                 ll["in_zone"] = True
-                self.get_logger().info(f" Left loop {ll['entry_count']} in progress")
+                self.publish_info(f" Left loop {ll['entry_count']} in progress")
         else:
             ll["in_zone"] = False
 
@@ -173,7 +193,7 @@ class GPSNode(Node):
                 zones["exit"]["entered"] = True
         elif zones["exit"]["entered"] and not zones["exit"]["exited"]:
             zones["exit"]["exited"] = True
-            self.get_logger().info("SKIDPAD complete")
+            self.publish_info("SKIDPAD complete")
 
 
     def check_cone_hits(self, x, y, hit_radius=0.3):
@@ -193,7 +213,7 @@ class GPSNode(Node):
             for i, (cx, cy) in enumerate(cone_list):
                 distance = math.hypot(x - cx, y - cy)
                 if distance <= hit_radius:
-                    self.get_logger().warn(f"Cone hit: {label}{i + 1} at distance {distance:.2f} m")
+                    self.publish_warn(f"Cone hit: {label}{i + 1} at distance {distance:.2f} m")
                     hit_detected = True
 
         return hit_detected
@@ -201,19 +221,19 @@ class GPSNode(Node):
 
     def print_all_cones(self):
         for i, (x, y) in enumerate(self.enter_left_cones, start=1):
-            self.get_logger().info(f"ENTER_LEFT{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"ENTER_LEFT{i}: x = {x:.2f} m, y = {y:.2f} m")
         for i, (x, y) in enumerate(self.enter_right_cones, start=1):
-            self.get_logger().info(f"ENTER_RIGHT{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"ENTER_RIGHT{i}: x = {x:.2f} m, y = {y:.2f} m")
         for i, (x, y) in enumerate(self.lhs_cones, start=1):
-            self.get_logger().info(f"LHS{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"LHS{i}: x = {x:.2f} m, y = {y:.2f} m")
         for i, (x, y) in enumerate(self.rhs_cones, start=1):
-            self.get_logger().info(f"RHS{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"RHS{i}: x = {x:.2f} m, y = {y:.2f} m")
         for i, (x, y) in enumerate(self.middle_cones, start=1):
-            self.get_logger().info(f"MIDDLE{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"MIDDLE{i}: x = {x:.2f} m, y = {y:.2f} m")
         for i, (x, y) in enumerate(self.exit_left_cones, start=1):
-            self.get_logger().info(f"EXIT_LEFT{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"EXIT_LEFT{i}: x = {x:.2f} m, y = {y:.2f} m")
         for i, (x, y) in enumerate(self.exit_right_cones, start=1):
-            self.get_logger().info(f"EXIT_RIGHT{i}: x = {x:.2f} m, y = {y:.2f} m")
+            self.publish_info(f"EXIT_RIGHT{i}: x = {x:.2f} m, y = {y:.2f} m")
 
 
     def read_gps_data(self):
@@ -230,17 +250,16 @@ class GPSNode(Node):
                     lat = dm_to_dd(lat_dm, lat_dir)
                     lon = dm_to_dd(lon_dm, lon_dir)
 
-                    if origin_lat is None:
-                        origin_lat = lat
-                        origin_lon = lon
-                        self.get_logger().info("Origin set.\n")
+                    if self.origin_lat is None:
+                        self.origin_lat = lat
+                        self.origin_lon = lon
 
                         # Create track
                         track = Centerline()
                         track.add_circle(cx=7.5, cy=11.5, r=16.75)
                         track.add_circle(cx=-7.5, cy=11.5, r=16.75)
                         track.add_line(0, 0, 0, 24)
-                        self.get_logger().info("Centerline set.")
+                        self.publish_info("Centerline set.")
 
                         # ENTER LEFT
                         self.enter_left_cones.extend([
@@ -285,19 +304,19 @@ class GPSNode(Node):
                             (1.7, 18), (1.5, 20.1), (1.5, 22.8)
                         ])
 
-                        self.get_logger().info("Local cones set")
+                        self.publish_info("Local cones set")
 
                     else:
-                        x, y = gps_to_local(lat, lon, origin_lat, origin_lon)
+                        x, y = gps_to_local(lat, lon, self.origin_lat, self.origin_lon)
                         self.x_buffer.append(x)
                         self.y_buffer.append(y)
-                        self.get_logger().info("Loading absolute & local coordinates...")
+                        self.publish_info("Loading absolute & local coordinates...")
 
                         if len(self.x_buffer) == 10:
                             avg_x = sum(self.x_buffer) / len(self.x_buffer)
                             avg_y = sum(self.y_buffer) / len(self.y_buffer)
-                            self.get_logger().info(f"Absolute coordinates: lat. = {lat:.8f}, long. = {lon:.8f}")
-                            self.get_logger().info(f"Local coordinates: x = {avg_x:.2f}, y = {avg_y:.2f}\n")
+                            self.publish_info(f"Absolute coordinates: lat. = {lat:.8f}, long. = {lon:.8f}")
+                            self.publish_info(f"Local coordinates: x = {avg_x:.2f}, y = {avg_y:.2f}\n")
 
                             # Cone hit check
                             self.check_cone_hits(avg_x, avg_y)
@@ -312,17 +331,17 @@ class GPSNode(Node):
                             self.check_cone_proximity(avg_x, avg_y, self.exit_right_cones, "EXIT_RIGHT")
 
                             if not track.check_proximity(avg_x, avg_y):
-                                self.get_logger().warn("⚠️  Warning: more than 1 meter off centerline!")
+                                self.publish_warn("⚠️  Warning: more than 1 meter off centerline!")
 
                             #  Check for loop events
                             self.check_loop_events(avg_x, avg_y, self.loop_zones)
                 else:
-                    self.get_logger().info("Finding satellites... no GPS fix yet.")
+                    self.publish_info("Finding satellites... no GPS fix yet.")
         except KeyboardInterrupt:
-            self.get_logger().info("\nStopped by user.")
-            # change all `print(...)` to `self.get_logger().info(...)` or `.warn(...)` or `.error(...)`
+            self.publish_info("\nStopped by user.")
+            # change all `print(...)` to `self.publish_info(...)` or `.warn(...)` or `.error(...)`
         except Exception as e:
-            self.get_logger().error(f"GPS read error: {e}")
+            self.publish_error(f"GPS read error: {e}")
 
 def main(args=None):
     rclpy.init(args=args)

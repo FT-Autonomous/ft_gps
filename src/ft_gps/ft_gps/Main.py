@@ -4,6 +4,7 @@ import serial
 import math
 from collections import deque
 from std_msgs.msg import String 
+import datetime
 
 # Centerline logic
 class Centerline:
@@ -79,7 +80,7 @@ class GPSNode(Node):
 
         self.publish_info('GPS Node started')
 
-        self.PORT = "/dev/tty.usbmodem14301"
+        self.PORT = "/dev/ttyACM0"
         self.BAUD = 9600
         self.origin_lat = None
         self.origin_lon = None
@@ -88,6 +89,7 @@ class GPSNode(Node):
         self.track = Centerline()
         self.setup_cones()
         self.setup_loop_zones()
+        self.start_time = datetime.datetime.now().isoformat()
 
         try:
             self.ser = serial.Serial(self.PORT, self.BAUD, timeout=1)
@@ -112,7 +114,7 @@ class GPSNode(Node):
             "right_loop": {"x": 15, "y": 11.5, "radius": 0.2, "entry_count": 0, "in_zone": False},
             "left_loop": {"x": -15, "y": 11.5, "radius": 0.2, "entry_count": 0, "in_zone": False},
             "exit": {"x": 0, "y": 22, "radius": 0.2, "entered": False, "exited": False}
-        } 
+        }
 
     def publish_info(self, msg: str):
         self.get_logger().info(msg)
@@ -239,6 +241,9 @@ class GPSNode(Node):
     def read_gps_data(self):
         try:
             line = self.ser.readline().decode(errors='ignore').strip()
+            with open(f"gps_log_{self.start_time}", "a") as f:
+                f.write(line)
+                f.write("\n")
             if line.startswith("$GNGGA"):
                 parts = line.split(",")
                 if len(parts) > 5 and parts[6] != '0':
@@ -255,10 +260,9 @@ class GPSNode(Node):
                         self.origin_lon = lon
 
                         # Create track
-                        track = Centerline()
-                        track.add_circle(cx=7.5, cy=11.5, r=16.75)
-                        track.add_circle(cx=-7.5, cy=11.5, r=16.75)
-                        track.add_line(0, 0, 0, 24)
+                        self.track.add_circle(cx=7.5, cy=11.5, r=16.75)
+                        self.track.add_circle(cx=-7.5, cy=11.5, r=16.75)
+                        self.track.add_line(0, 0, 0, 24)
                         self.publish_info("Centerline set.")
 
                         # ENTER LEFT
@@ -303,7 +307,6 @@ class GPSNode(Node):
                         self.exit_right_cones.extend([
                             (1.7, 18), (1.5, 20.1), (1.5, 22.8)
                         ])
-
                         self.publish_info("Local cones set")
 
                     else:
@@ -330,7 +333,7 @@ class GPSNode(Node):
                             self.check_cone_proximity(avg_x, avg_y, self.exit_left_cones, "EXIT_LEFT")
                             self.check_cone_proximity(avg_x, avg_y, self.exit_right_cones, "EXIT_RIGHT")
 
-                            if not track.check_proximity(avg_x, avg_y):
+                            if not self.track.check_proximity(avg_x, avg_y):
                                 self.publish_warn("⚠️  Warning: more than 1 meter off centerline!")
 
                             #  Check for loop events

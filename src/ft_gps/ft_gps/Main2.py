@@ -238,7 +238,7 @@ class GPSNode(Node):
         for i, (x, y) in enumerate(self.exit_right_cones, start=1):
             self.publish_info(f"EXIT_RIGHT{i}: x = {x:.2f} m, y = {y:.2f} m")
 
-    def draw_track_and_points(self, gps_filename="gps_data_log.txt"):
+    def draw_track_and_points(self, gps_filename="gps_log.txt"):
         fig, ax = plot.subplots(figsize=(10, 10))
         
         # Plot all cones

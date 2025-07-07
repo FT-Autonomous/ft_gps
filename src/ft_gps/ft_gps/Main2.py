@@ -93,7 +93,7 @@ class GPSNode(Node):
         self.start_time = datetime.datetime.now().isoformat()
 
         try:
-            self.ser = serial.Serial(self.PORT, self.BAUD, timeout=1)
+            #self.ser = serial.Serial(self.PORT, self.BAUD, timeout=1)
             self.timer = self.create_timer(0.1, self.read_gps_data) # loop 
         except Exception as e:
             self.publish_error(f"Serial init failed: {e}")
